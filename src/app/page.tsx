@@ -213,7 +213,7 @@ export default function TreasuryDashboard() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-slate-900 text-base tracking-tight">B2B Daylight Treasury & Ledger Portal</span>
+                <span className="font-bold text-slate-900 text-base tracking-tight">B2B Virtual Account & Double-Entry Ledger Engine</span>
                 <span className="flex h-2 w-2 relative">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
