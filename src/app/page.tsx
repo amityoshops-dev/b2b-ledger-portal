@@ -35,6 +35,8 @@ interface UnderwritingData {
 }
 
 export default function TreasuryDashboard() {
+  const API_BASE = "https://b2b-virtual-account-engine.onrender.com/api/v1";
+  
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedVendorId, setSelectedVendorId] = useState<string>("");
   const [underwriting, setUnderwriting] = useState<UnderwritingData | null>(null);
@@ -43,29 +45,11 @@ export default function TreasuryDashboard() {
   const [loading, setLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
-  // Outward Payout Form State
   const [payoutAmount, setPayoutAmount] = useState("5000.00");
   const [beneficiaryName, setBeneficiaryName] = useState("Alpha Enterprises Pvt Ltd");
   const [beneficiaryAcc, setBeneficiaryAcc] = useState("50100482910291");
   const [beneficiaryIfsc, setBeneficiaryIfsc] = useState("HDFC0000060");
   const [payoutResult, setPayoutResult] = useState<any>(null);
-
-  const fetchAccounts = async () => {
-    try {
-      const res = await fetch(`/api/proxy/accounts`);
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setAccounts(data);
-        const firstVendor = data.find((a: Account) => a.account_type === "VENDOR_VIRTUAL");
-        if (firstVendor && !selectedVendorId) {
-          setSelectedVendorId(firstVendor.id);
-          updateXmlTemplate(firstVendor.account_number);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load accounts", err);
-    }
-  };
 
   const updateXmlTemplate = (van: string) => {
     setCamtXml(
@@ -73,14 +57,29 @@ export default function TreasuryDashboard() {
     );
   };
 
-  useEffect(() => {
-    fetchAccounts();
-  }, []);
+  const fetchAccounts = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/accounts`);
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        setAccounts(data);
+        const firstVendor = data.find((a: Account) => a.account_type === "VENDOR_VIRTUAL") || data[0];
+        setSelectedVendorId(firstVendor.id);
+        updateXmlTemplate(firstVendor.account_number);
+        fetchUnderwriting(firstVendor.id);
+      }
+    } catch (err) {
+      console.error("Failed to load accounts", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchUnderwriting = async (vendorId: string) => {
     if (!vendorId) return;
     try {
-      const res = await fetch(`/api/proxy/underwriting/credit-assessment/${vendorId}`);
+      const res = await fetch(`${API_BASE}/underwriting/credit-assessment/${vendorId}`);
       const data = await res.json();
       setUnderwriting(data);
     } catch (err) {
@@ -89,18 +88,20 @@ export default function TreasuryDashboard() {
   };
 
   useEffect(() => {
-    if (selectedVendorId) {
-      fetchUnderwriting(selectedVendorId);
-      const acc = accounts.find(a => a.id === selectedVendorId);
-      if (acc) updateXmlTemplate(acc.account_number);
-    }
-  }, [selectedVendorId]);
+    fetchAccounts();
+  }, []);
+
+  const handleSelectVendor = (acc: Account) => {
+    setSelectedVendorId(acc.id);
+    updateXmlTemplate(acc.account_number);
+    fetchUnderwriting(acc.id);
+  };
 
   const runCamtRecon = async () => {
     setLoading(true);
     setActionMessage(null);
     try {
-      const res = await fetch(`/api/proxy/reconciliation/camt053-statement`, {
+      const res = await fetch(`${API_BASE}/reconciliation/camt053-statement`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -120,7 +121,7 @@ export default function TreasuryDashboard() {
   const triggerAutoHeal = async (breakItem: any) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/proxy/reconciliation/auto-heal-break`, {
+      const res = await fetch(`${API_BASE}/reconciliation/auto-heal-break`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -135,7 +136,7 @@ export default function TreasuryDashboard() {
       if (res.ok) {
         setActionMessage(`Break ${breakItem.utr_reference} healed successfully!`);
         runCamtRecon();
-        if (selectedVendorId) fetchUnderwriting(selectedVendorId);
+        fetchAccounts();
       } else {
         setActionMessage(`Error: ${result.detail}`);
       }
@@ -153,7 +154,7 @@ export default function TreasuryDashboard() {
     setPayoutResult(null);
     setActionMessage(null);
     try {
-      const res = await fetch(`/api/proxy/payouts/disburse`, {
+      const res = await fetch(`${API_BASE}/payouts/disburse`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -196,10 +197,12 @@ export default function TreasuryDashboard() {
         </div>
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => { fetchAccounts(); if (selectedVendorId) fetchUnderwriting(selectedVendorId); }}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold transition border border-slate-700"
+            onClick={fetchAccounts}
+            disabled={loading}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold transition border border-slate-700 disabled:opacity-50"
           >
-            <RefreshCcw className="w-3.5 h-3.5" /> Refresh Node
+            <RefreshCcw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> 
+            {loading ? "Syncing..." : "Refresh Node"}
           </button>
         </div>
       </header>
@@ -210,7 +213,6 @@ export default function TreasuryDashboard() {
         </div>
       )}
 
-      {/* Primary Top Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         
         {/* Nodal Directory */}
@@ -219,27 +221,33 @@ export default function TreasuryDashboard() {
             <Building2 className="w-4 h-4 text-sky-400" /> Nodal & Sub-Ledger Directory
           </h2>
           <div className="space-y-3 max-h-[380px] overflow-y-auto">
-            {accounts.map((acc) => (
-              <div 
-                key={acc.id} 
-                onClick={() => acc.account_type === "VENDOR_VIRTUAL" && setSelectedVendorId(acc.id)}
-                className={`p-3 rounded-lg border transition cursor-pointer ${
-                  selectedVendorId === acc.id 
-                    ? "bg-slate-800 border-sky-500 ring-1 ring-sky-500" 
-                    : "bg-slate-950/50 border-slate-800 hover:border-slate-700"
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-200">{acc.account_name}</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-slate-300">
-                    {acc.account_type}
-                  </span>
+            {accounts.length > 0 ? (
+              accounts.map((acc) => (
+                <div 
+                  key={acc.id} 
+                  onClick={() => handleSelectVendor(acc)}
+                  className={`p-3 rounded-lg border transition cursor-pointer ${
+                    selectedVendorId === acc.id 
+                      ? "bg-slate-800 border-sky-500 ring-1 ring-sky-500" 
+                      : "bg-slate-950/50 border-slate-800 hover:border-slate-700"
+                  }`}
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-slate-200">{acc.account_name}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-slate-300">
+                      {acc.account_type}
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-mono text-slate-400 mt-1 truncate">
+                    {acc.account_number}
+                  </div>
                 </div>
-                <div className="text-[11px] font-mono text-slate-400 mt-1 truncate">
-                  {acc.account_number}
-                </div>
+              ))
+            ) : (
+              <div className="text-xs text-slate-500 py-8 text-center">
+                {loading ? "Connecting to Ledger Node..." : "No accounts found. Click Refresh Node."}
               </div>
-            ))}
+            )}
           </div>
         </div>
 
@@ -302,7 +310,7 @@ export default function TreasuryDashboard() {
 
           <button 
             onClick={runCamtRecon}
-            disabled={loading}
+            disabled={loading || !camtXml}
             className="w-full mt-3 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 rounded-lg font-semibold text-xs transition"
           >
             {loading ? "Reconciling Engine..." : "Ingest & Reconcile CAMT.053"}
@@ -342,7 +350,6 @@ export default function TreasuryDashboard() {
 
       </div>
 
-      {/* Secondary Bottom Row: Stage 3 Payout Egress & pain.001 Viewer */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         
         {/* Outward Payout Form */}
@@ -401,7 +408,7 @@ export default function TreasuryDashboard() {
           </form>
         </div>
 
-        {/* Live Generated ISO 20022 XML Display */}
+        {/* pain.001 Live Payload */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2 mb-4">
             <Code className="w-4 h-4 text-amber-400" /> Generated pain.001.001.09 Wire Payload
