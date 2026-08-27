@@ -35,8 +35,6 @@ interface UnderwritingData {
 }
 
 export default function TreasuryDashboard() {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://b2b-virtual-account-engine.onrender.com";
-  
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedVendorId, setSelectedVendorId] = useState<string>("");
   const [underwriting, setUnderwriting] = useState<UnderwritingData | null>(null);
@@ -54,7 +52,7 @@ export default function TreasuryDashboard() {
 
   const fetchAccounts = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/v1/accounts`);
+      const res = await fetch(`/api/proxy/accounts`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setAccounts(data);
@@ -82,7 +80,7 @@ export default function TreasuryDashboard() {
   const fetchUnderwriting = async (vendorId: string) => {
     if (!vendorId) return;
     try {
-      const res = await fetch(`${API_URL}/api/v1/underwriting/credit-assessment/${vendorId}`);
+      const res = await fetch(`/api/proxy/underwriting/credit-assessment/${vendorId}`);
       const data = await res.json();
       setUnderwriting(data);
     } catch (err) {
@@ -102,7 +100,7 @@ export default function TreasuryDashboard() {
     setLoading(true);
     setActionMessage(null);
     try {
-      const res = await fetch(`${API_URL}/api/v1/reconciliation/camt053-statement`, {
+      const res = await fetch(`/api/proxy/reconciliation/camt053-statement`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -122,7 +120,7 @@ export default function TreasuryDashboard() {
   const triggerAutoHeal = async (breakItem: any) => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/v1/reconciliation/auto-heal-break`, {
+      const res = await fetch(`/api/proxy/reconciliation/auto-heal-break`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -155,7 +153,7 @@ export default function TreasuryDashboard() {
     setPayoutResult(null);
     setActionMessage(null);
     try {
-      const res = await fetch(`${API_URL}/api/v1/payouts/disburse`, {
+      const res = await fetch(`/api/proxy/payouts/disburse`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
