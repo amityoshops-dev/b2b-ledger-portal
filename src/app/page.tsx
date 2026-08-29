@@ -20,7 +20,8 @@ import {
   Repeat,
   Receipt,
   Zap,
-  Activity
+  Activity,
+  PlusCircle
 } from "lucide-react";
 
 interface Account {
@@ -59,7 +60,6 @@ export default function TreasuryDashboard() {
   const [actionMessage, setActionMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // CMS Tabs
   const [activeRail, setActiveRail] = useState<"payouts" | "upi" | "nach" | "bbps">("payouts");
 
   // Outward Payout State
@@ -70,8 +70,8 @@ export default function TreasuryDashboard() {
   const [payoutResult, setPayoutResult] = useState<any>(null);
 
   // NPCI Simulation States
-  const [upiAmount, setUpiAmount] = useState("2500.00");
-  const [upiResult, setUpiResult] = useState<string | null>(null);
+  const [upiAmount, setUpiAmount] = useState("10000.00");
+  const [upiResult, setUpiResult] = useState<{ uri: string; qrUrl: string } | null>(null);
   const [nachMandateAmount, setNachMandateAmount] = useState("50000.00");
   const [nachResult, setNachResult] = useState<any>(null);
   const [bbpsInvoiceId, setBbpsInvoiceId] = useState("INV-2026-9041");
@@ -91,11 +91,12 @@ export default function TreasuryDashboard() {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
         setAccounts(data);
-        // Specifically prioritize selecting a VENDOR_VIRTUAL account
         const vendorAccount = data.find((a: Account) => a.account_type === "VENDOR_VIRTUAL") || data[0];
-        setSelectedVendorId(vendorAccount.id);
-        updateXmlTemplate(vendorAccount.account_number);
-        fetchUnderwriting(vendorAccount.id);
+        if (!selectedVendorId || !data.some((a: Account) => a.id === selectedVendorId)) {
+          setSelectedVendorId(vendorAccount.id);
+          updateXmlTemplate(vendorAccount.account_number);
+          fetchUnderwriting(vendorAccount.id);
+        }
       }
     } catch (err) {
       console.error("Failed to load accounts", err);
@@ -123,6 +124,23 @@ export default function TreasuryDashboard() {
     setSelectedVendorId(acc.id);
     updateXmlTemplate(acc.account_number);
     fetchUnderwriting(acc.id);
+    setUpiResult(null);
+  };
+
+  const injectLiveVolume = async () => {
+    if (!selectedVendorId) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/seed-live-volume/${selectedVendorId}`, { method: "POST" });
+      if (res.ok) {
+        setActionMessage({ text: "₹250,000 Volume Injected! Real-time credit limits recalculated.", type: "success" });
+        fetchUnderwriting(selectedVendorId);
+      }
+    } catch (err) {
+      console.error("Failed to inject volume", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const runCamtRecon = async () => {
@@ -165,6 +183,7 @@ export default function TreasuryDashboard() {
         setActionMessage({ text: `Break ${breakItem.utr_reference} healed and balanced!`, type: "success" });
         runCamtRecon();
         fetchAccounts();
+        if (selectedVendorId) fetchUnderwriting(selectedVendorId);
       } else {
         setActionMessage({ text: result.detail || "Healing exception occurred", type: "error" });
       }
@@ -212,21 +231,30 @@ export default function TreasuryDashboard() {
   const handleSimulateUpi = () => {
     const activeAcc = accounts.find(a => a.id === selectedVendorId);
     const vpa = activeAcc ? `${activeAcc.account_number.toLowerCase()}@hdfcbank` : "merchant@hdfcbank";
-    const intentUrl = `upi://pay?pa=${vpa}&pn=${encodeURIComponent(activeAcc?.account_name || "Merchant")}&am=${upiAmount}&cu=INR&tn=B2B_SETTLEMENT_${Date.now()}`;
-    setUpiResult(intentUrl);
+    const uri = `upi://pay?pa=${vpa}&pn=${encodeURIComponent(activeAcc?.account_name || "Merchant")}&am=${upiAmount}&cu=INR&tn=B2B_SETTLEMENT_${Date.now()}`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(uri)}`;
+    setUpiResult({ uri, qrUrl });
     setActionMessage({ text: `Generated Dynamic NPCI UPI QR Intent for ₹${upiAmount}!`, type: "success" });
   };
 
-  const handleSimulateNach = () => {
-    setNachResult({
-      umrn: `UMRN${Date.now()}IN01`,
-      status: "ACTIVE_MANDATE_REGISTERED",
-      frequency: "MONTHLY_RECURRING",
-      max_amount: nachMandateAmount,
-      bank: "HDFC BANK LTD",
-      destination_account: beneficiaryAcc
-    });
-    setActionMessage({ text: `NACH e-Mandate registered with NPCI Clearing Rails!`, type: "success" });
+  const handleSimulateNach = async () => {
+    if (!selectedVendorId) return;
+    try {
+      const res = await fetch(`${API_BASE}/npci/nach-mandate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vendor_account_id: selectedVendorId,
+          max_amount: parseFloat(nachMandateAmount),
+          frequency: "MONTHLY"
+        })
+      });
+      const data = await res.json();
+      setNachResult(data);
+      setActionMessage({ text: `NACH Mandate ${data.umrn} registered with NPCI clearing rails!`, type: "success" });
+    } catch (err) {
+      console.error("NACH error", err);
+    }
   };
 
   const handleSimulateBbps = () => {
@@ -251,7 +279,7 @@ export default function TreasuryDashboard() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans antialiased pb-20">
       
-      {/* Top Bar */}
+      {/* Header */}
       <header className="border-b border-slate-200/90 bg-white sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -267,7 +295,7 @@ export default function TreasuryDashboard() {
                 </span>
               </div>
               <p className="text-xs text-slate-500">
-                CMS Clearing Core &bull; NPCI Rails (UPI/NACH/BBPS) &bull; ISO 20022 Engine
+                CMS Clearing Core &bull; NPCI Rails (UPI / NACH / BBPS) &bull; ISO 20022 Engine
               </p>
             </div>
           </div>
@@ -293,7 +321,7 @@ export default function TreasuryDashboard() {
         </div>
       </header>
 
-      {/* Main Workspace */}
+      {/* Main Container */}
       <main className="max-w-7xl mx-auto px-6 pt-6 space-y-6">
         
         {/* Banner Alert */}
@@ -330,9 +358,7 @@ export default function TreasuryDashboard() {
           <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs">
             <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Sanctioned Revolver Line</div>
             <div className="text-xl font-bold font-mono text-emerald-600 mt-1">
-              ₹{underwriting && parseFloat(underwriting.eligible_revolving_wc_limit) > 0 
-                ? Number(underwriting.eligible_revolving_wc_limit).toLocaleString("en-IN", { minimumFractionDigits: 2 }) 
-                : "250,000.00"}
+              ₹{underwriting ? Number(underwriting.eligible_revolving_wc_limit).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "0.00"}
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">
               Tier: <span className="font-semibold text-slate-800">{underwriting?.credit_risk_tier || "TIER_1"}</span>
@@ -408,7 +434,7 @@ export default function TreasuryDashboard() {
                   })
                 ) : (
                   <div className="py-12 text-center text-xs text-slate-500">
-                    No active accounts found on the database.
+                    Connecting to live PostgreSQL ledger...
                   </div>
                 )}
               </div>
@@ -422,57 +448,71 @@ export default function TreasuryDashboard() {
             </div>
           </div>
 
-          {/* Underwriting Assessment Details */}
+          {/* Underwriting Card with Real-time Ingestion Trigger */}
           <div className="lg:col-span-7 bg-white border border-slate-200/80 rounded-xl p-5 shadow-xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
                 <div className="flex items-center gap-2">
                   <CreditCard className="w-4 h-4 text-emerald-600" />
                   <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                    Stage 4 Underwriting & Credit Line Evaluation
+                    Stage 4 Underwriting & Live Credit Scoring
                   </h2>
                 </div>
-                <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
-                  <Activity className="w-3 h-3 text-emerald-600 animate-pulse" />
-                  {underwriting ? underwriting.underwriting_verdict : "APPROVED"}
-                </span>
-              </div>
-
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
-                  <div className="text-xs font-medium text-slate-500">Sanctioned Revolver Line Calculation</div>
-                  <div className="text-2xl font-extrabold text-emerald-700 mt-1 font-mono">
-                    ₹{underwriting && parseFloat(underwriting.eligible_revolving_wc_limit) > 0 
-                      ? Number(underwriting.eligible_revolving_wc_limit).toLocaleString("en-IN", { minimumFractionDigits: 2 }) 
-                      : "250,000.00"}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Computed dynamically from settled throughput volume, cash velocity, and debt-service capacity.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200/80">
-                    <div className="text-[11px] font-semibold text-slate-500">Maximum Recommended Tenor</div>
-                    <div className="text-base font-bold text-slate-900 mt-0.5 font-mono">
-                      {underwriting?.max_recommended_loan_tenure_days || 60} Days
-                    </div>
-                  </div>
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200/80">
-                    <div className="text-[11px] font-semibold text-slate-500">Credit Risk Tier</div>
-                    <div className="text-base font-bold text-blue-700 mt-0.5 font-mono">
-                      {underwriting?.credit_risk_tier || "TIER_1"}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200/80">
-                  <div className="text-[11px] font-semibold text-slate-500 mb-1">Risk Assessment Details</div>
-                  <div className="text-xs text-slate-700 leading-relaxed">
-                    DSCR coverage is verified at <strong>{underwriting?.dscr_coverage_ratio || 2.8}x</strong> (above the 1.50x risk threshold). Cash velocity of <strong>{underwriting?.cash_velocity_index || 4.2}x</strong> qualifies the vendor for automated daylight drawdown facilities.
-                  </div>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={injectLiveVolume}
+                    disabled={loading || !selectedVendorId}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-md text-xs font-semibold transition"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5" /> Inject Volume (+₹250k)
+                  </button>
+                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
+                    <Activity className="w-3 h-3 text-emerald-600 animate-pulse" />
+                    {underwriting ? underwriting.underwriting_verdict : "APPROVED"}
+                  </span>
                 </div>
               </div>
+
+              {underwriting ? (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+                    <div className="text-xs font-medium text-slate-500">Sanctioned Revolver Line Calculation</div>
+                    <div className="text-2xl font-extrabold text-emerald-700 mt-1 font-mono">
+                      ₹{Number(underwriting.eligible_revolving_wc_limit).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1 flex justify-between">
+                      <span>Historical Settled Volume: <strong>₹{Number(underwriting.historical_settled_volume).toLocaleString("en-IN")}</strong></span>
+                      <span>Balance: <strong>₹{Number(underwriting.current_ledger_balance).toLocaleString("en-IN")}</strong></span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200/80">
+                      <div className="text-[11px] font-semibold text-slate-500">Maximum Recommended Tenor</div>
+                      <div className="text-base font-bold text-slate-900 mt-0.5 font-mono">
+                        {underwriting.max_recommended_loan_tenure_days} Days
+                      </div>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200/80">
+                      <div className="text-[11px] font-semibold text-slate-500">Credit Risk Tier</div>
+                      <div className="text-base font-bold text-blue-700 mt-0.5 font-mono">
+                        {underwriting.credit_risk_tier}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200/80">
+                    <div className="text-[11px] font-semibold text-slate-500 mb-1">Risk Assessment Details</div>
+                    <div className="text-xs text-slate-700 leading-relaxed">
+                      DSCR coverage is verified at <strong>{underwriting.dscr_coverage_ratio}x</strong> (above benchmark threshold). Cash velocity of <strong>{underwriting.cash_velocity_index}x</strong> qualifies the vendor for automated daylight drawdown facilities.
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-16 text-center text-xs text-slate-500">
+                  Select a vendor sub-ledger on the left to review underwriting metrics.
+                </div>
+              )}
             </div>
 
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
@@ -512,7 +552,7 @@ export default function TreasuryDashboard() {
                   activeRail === "upi" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <QrCode className="w-3 h-3 text-emerald-600" /> NPCI UPI Intent
+                <QrCode className="w-3 h-3 text-emerald-600" /> NPCI UPI Intent & QR
               </button>
               <button 
                 onClick={() => setActiveRail("nach")}
@@ -618,13 +658,13 @@ export default function TreasuryDashboard() {
               </div>
             )}
 
-            {/* Tab 2: NPCI UPI Rails */}
+            {/* Tab 2: NPCI UPI Rails with Live QR Code */}
             {activeRail === "upi" && (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-6 space-y-3">
                   <h3 className="text-xs font-bold uppercase text-slate-700">Dynamic UPI Merchant Collection (NPCI Switch)</h3>
                   <p className="text-xs text-slate-600">
-                    Generates an instant UPI Auto-Route QR payload mapped to the active merchant virtual account for auto-split settlement.
+                    Generates a live, scan-ready UPI Auto-Route QR payload mapped to the active merchant virtual account for automated escrow splitting.
                   </p>
                   <div>
                     <label className="text-[11px] font-semibold text-slate-700 block mb-1">Collection Amount (INR)</label>
@@ -639,25 +679,30 @@ export default function TreasuryDashboard() {
                     onClick={handleSimulateUpi}
                     className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs rounded-lg shadow-xs transition"
                   >
-                    Generate NPCI UPI Intent & QR Payload
+                    Generate Live NPCI Dynamic QR
                   </button>
                 </div>
 
                 <div className="lg:col-span-6 bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
                   <div>
-                    <div className="text-xs font-bold uppercase text-slate-700 mb-2">UPI Intent URI Stream</div>
+                    <div className="text-xs font-bold uppercase text-slate-700 mb-2">Live NPCI Intent & QR Payload</div>
                     {upiResult ? (
-                      <div className="space-y-2">
-                        <div className="p-3 bg-white border border-slate-200 rounded-lg font-mono text-[11px] text-emerald-800 break-all">
-                          {upiResult}
+                      <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <div className="p-2 bg-white rounded-lg border border-slate-200 shadow-xs">
+                          <img src={upiResult.qrUrl} alt="UPI QR" className="w-28 h-28" />
                         </div>
-                        <div className="text-[11px] text-slate-600">
-                          <strong>Settlement Route:</strong> Direct to Escrow &rarr; 90% Vendor Virtual Account + 10% Platform Revenue
+                        <div className="space-y-1 text-xs overflow-hidden">
+                          <div className="p-2 bg-white border border-slate-200 rounded font-mono text-[10px] text-emerald-800 break-all max-h-16 overflow-y-auto">
+                            {upiResult.uri}
+                          </div>
+                          <div className="text-[11px] text-slate-600 pt-1">
+                            <strong>Escrow Routing:</strong> 90% Vendor + 10% Fee Split
+                          </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="h-[100px] flex items-center justify-center text-xs text-slate-400">
-                        Click above to simulate an NPCI UPI collection intent string.
+                      <div className="h-[110px] flex items-center justify-center text-xs text-slate-400">
+                        Click Generate to render the live dynamic NPCI UPI QR code.
                       </div>
                     )}
                   </div>
@@ -702,6 +747,7 @@ export default function TreasuryDashboard() {
                         <div className="p-3 bg-white border border-slate-200 rounded-lg space-y-1 font-mono text-[11px]">
                           <div>UMRN: <strong className="text-blue-700">{nachResult.umrn}</strong></div>
                           <div>STATUS: <strong className="text-emerald-700">{nachResult.status}</strong></div>
+                          <div>CLEARING: {nachResult.clearing_switch}</div>
                           <div>MAX LIMIT: ₹{Number(nachResult.max_amount).toLocaleString("en-IN")}</div>
                         </div>
                       </div>
