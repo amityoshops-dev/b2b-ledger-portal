@@ -21,7 +21,10 @@ import {
   Receipt,
   Zap,
   Activity,
-  PlusCircle
+  PlusCircle,
+  Fingerprint,
+  FileSpreadsheet,
+  CheckCheck
 } from "lucide-react";
 
 interface Account {
@@ -60,7 +63,14 @@ export default function TreasuryDashboard() {
   const [actionMessage, setActionMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const [activeRail, setActiveRail] = useState<"payouts" | "upi" | "nach" | "bbps">("payouts");
+  // Active Rail Navigation
+  const [activeRail, setActiveRail] = useState<"uli" | "payouts" | "upi" | "nach" | "bbps">("uli");
+
+  // ULI Simulation State
+  const [uliBorrowerId, setUliBorrowerId] = useState("CUST_MAHA_89210");
+  const [uliLandRecordGat, setUliLandRecordGat] = useState("Survey Gat 142/1 - Sategaon");
+  const [uliLoading, setUliLoading] = useState(false);
+  const [uliResult, setUliResult] = useState<any>(null);
 
   // Outward Payout State
   const [payoutAmount, setPayoutAmount] = useState("5000.00");
@@ -141,6 +151,27 @@ export default function TreasuryDashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSimulateUli = () => {
+    setUliLoading(true);
+    setTimeout(() => {
+      setUliLoading(false);
+      setUliResult({
+        consent_handle: "594b686c-1fbb-4e3c-8aed-5c801dcd891b",
+        dsp_kyc_status: "VERIFIED_AADHAAR_PAN",
+        land_records_registry: "MAHABHULEKH_MAHARASHTRA",
+        land_gat_number: uliLandRecordGat,
+        encumbrance_status: "NIL_UNENCUMBERED",
+        account_aggregator_dscr: "2.95x",
+        sanctioned_amount: "₹1,80,000.00",
+        routing_engine: "AUTO_PIPE_TO_DOUBLE_ENTRY_CORE"
+      });
+      setActionMessage({ 
+        text: "ULI Consent & Data verification successful! Limit ready for core disbursement.", 
+        type: "success" 
+      });
+    }, 1000);
   };
 
   const runCamtRecon = async () => {
@@ -295,7 +326,7 @@ export default function TreasuryDashboard() {
                 </span>
               </div>
               <p className="text-xs text-slate-500">
-                CMS Clearing Core &bull; NPCI Rails (UPI / NACH / BBPS) &bull; ISO 20022 Engine
+                RBIH ULI Rails &bull; CMS Double-Entry Core &bull; ISO 20022 Multi-Rail Engine
               </p>
             </div>
           </div>
@@ -321,7 +352,7 @@ export default function TreasuryDashboard() {
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* Main Workspace */}
       <main className="max-w-7xl mx-auto px-6 pt-6 space-y-6">
         
         {/* Banner Alert */}
@@ -378,7 +409,7 @@ export default function TreasuryDashboard() {
             <div className="text-xl font-bold font-mono text-slate-900 mt-1">
               {underwriting ? `${underwriting.cash_velocity_index}x` : "4.2x"}
             </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Turnover Velocity</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">Throughput Velocity</div>
           </div>
         </div>
 
@@ -448,7 +479,7 @@ export default function TreasuryDashboard() {
             </div>
           </div>
 
-          {/* Underwriting Card with Real-time Ingestion Trigger */}
+          {/* Underwriting Card with Live Injection */}
           <div className="lg:col-span-7 bg-white border border-slate-200/80 rounded-xl p-5 shadow-xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
@@ -504,7 +535,7 @@ export default function TreasuryDashboard() {
                   <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200/80">
                     <div className="text-[11px] font-semibold text-slate-500 mb-1">Risk Assessment Details</div>
                     <div className="text-xs text-slate-700 leading-relaxed">
-                      DSCR coverage is verified at <strong>{underwriting.dscr_coverage_ratio}x</strong> (above benchmark threshold). Cash velocity of <strong>{underwriting.cash_velocity_index}x</strong> qualifies the vendor for automated daylight drawdown facilities.
+                      DSCR coverage is verified at <strong>{underwriting.dscr_coverage_ratio}x</strong>. Cash velocity of <strong>{underwriting.cash_velocity_index}x</strong> qualifies the vendor for automated daylight drawdown facilities.
                     </div>
                   </div>
                 </div>
@@ -523,21 +554,29 @@ export default function TreasuryDashboard() {
 
         </div>
 
-        {/* NPCI & CMS Corporate Rails Hub */}
+        {/* Unified Banking Hub (ULI & NPCI Rails) */}
         <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-xs">
           
           <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-100 gap-3">
             <div>
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-500" /> CMS Plumbing & NPCI Clearing Rails Hub
+                <Zap className="w-4 h-4 text-amber-500" /> Unified Transaction Banking & Credit Rails
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Simulate and operate unified corporate collections and payouts across NPCI switches.
+                Operate the full financial lifecycle from ULI credit data aggregation to core ledger settlement.
               </p>
             </div>
 
-            {/* Rail Selector Tabs */}
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+            {/* Rail Tabs */}
+            <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+              <button 
+                onClick={() => setActiveRail("uli")}
+                className={`px-3 py-1 rounded text-xs font-semibold transition flex items-center gap-1.5 ${
+                  activeRail === "uli" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Fingerprint className="w-3.5 h-3.5 text-blue-600" /> RBIH ULI Credit Rail
+              </button>
               <button 
                 onClick={() => setActiveRail("payouts")}
                 className={`px-3 py-1 rounded text-xs font-semibold transition ${
@@ -552,7 +591,7 @@ export default function TreasuryDashboard() {
                   activeRail === "upi" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <QrCode className="w-3 h-3 text-emerald-600" /> NPCI UPI Intent & QR
+                <QrCode className="w-3 h-3 text-emerald-600" /> NPCI UPI QR
               </button>
               <button 
                 onClick={() => setActiveRail("nach")}
@@ -568,14 +607,83 @@ export default function TreasuryDashboard() {
                   activeRail === "bbps" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <Receipt className="w-3 h-3 text-purple-600" /> BBPS B2B Invoicing
+                <Receipt className="w-3 h-3 text-purple-600" /> BBPS Invoicing
               </button>
             </div>
           </div>
 
           <div className="pt-5">
             
-            {/* Tab 1: Host to Host ISO 20022 */}
+            {/* Tab 1: RBIH ULI Simulator */}
+            {activeRail === "uli" && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div className="lg:col-span-6 space-y-3">
+                  <h3 className="text-xs font-bold uppercase text-slate-700">RBIH Unified Lending Interface (ULI) Orchestrator</h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Executes frictionless, consent-based borrower validation across State Land Registries (Mahabhulekh 7/12), Account Aggregator financial flows, and Aadhaar e-KYC.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">Borrower Customer ID</label>
+                      <input 
+                        type="text" 
+                        value={uliBorrowerId} 
+                        onChange={(e) => setUliBorrowerId(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500 transition"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">Land Record / Gat Survey</label>
+                      <input 
+                        type="text" 
+                        value={uliLandRecordGat} 
+                        onChange={(e) => setUliLandRecordGat(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-blue-500 transition"
+                      />
+                    </div>
+                  </div>
+                  <button 
+                    onClick={handleSimulateUli}
+                    disabled={uliLoading}
+                    className="w-full py-2.5 bg-blue-700 hover:bg-blue-800 text-white font-semibold text-xs rounded-lg shadow-xs transition"
+                  >
+                    {uliLoading ? "Querying ULI Gateway & Land Registries..." : "Execute ULI Consent & Appraisal Handshake"}
+                  </button>
+                </div>
+
+                <div className="lg:col-span-6 bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
+                  <div>
+                    <div className="text-xs font-bold uppercase text-slate-700 mb-2">ULI Normalized Appraisal Response</div>
+                    {uliResult ? (
+                      <div className="space-y-2 text-xs">
+                        <div className="p-3 bg-white border border-slate-200 rounded-lg space-y-1 font-mono text-[11px]">
+                          <div>CONSENT_HANDLE: <strong className="text-blue-700">{uliResult.consent_handle}</strong></div>
+                          <div>DSP REGISTRY: <strong className="text-slate-900">{uliResult.land_records_registry}</strong></div>
+                          <div>SURVEY: {uliResult.land_gat_number}</div>
+                          <div>ENCUMBRANCE: <strong className="text-emerald-700">{uliResult.encumbrance_status}</strong></div>
+                          <div>AA CASH FLOW DSCR: <strong className="text-blue-700">{uliResult.account_aggregator_dscr}</strong></div>
+                          <div>SANCTIONED LIMIT: <strong className="text-emerald-700">{uliResult.sanctioned_amount}</strong></div>
+                        </div>
+                        <div className="text-[11px] text-slate-600 flex items-center gap-1">
+                          <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Piped directly into Double-Entry Ledger for ISO 20022 wire drawdown.</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-[120px] flex items-center justify-center text-xs text-slate-400">
+                        Execute ULI handshake above to pull normalized consent data.
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-slate-200 flex justify-between">
+                    <span>STANDARD: ReBIT FIU 2.0.0</span>
+                    <span>STATUS: REST / JWS SIGNED</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 2: Host to Host ISO 20022 */}
             {activeRail === "payouts" && (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-6">
@@ -658,7 +766,7 @@ export default function TreasuryDashboard() {
               </div>
             )}
 
-            {/* Tab 2: NPCI UPI Rails with Live QR Code */}
+            {/* Tab 3: NPCI UPI Rails */}
             {activeRail === "upi" && (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-6 space-y-3">
@@ -714,7 +822,7 @@ export default function TreasuryDashboard() {
               </div>
             )}
 
-            {/* Tab 3: NACH e-Mandate */}
+            {/* Tab 4: NACH e-Mandate */}
             {activeRail === "nach" && (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-6 space-y-3">
@@ -765,7 +873,7 @@ export default function TreasuryDashboard() {
               </div>
             )}
 
-            {/* Tab 4: BBPS B2B Invoicing */}
+            {/* Tab 5: BBPS B2B Invoicing */}
             {activeRail === "bbps" && (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-6 space-y-3">
